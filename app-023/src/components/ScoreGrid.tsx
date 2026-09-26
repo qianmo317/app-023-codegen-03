@@ -126,6 +126,8 @@ export function ScoreGrid({
                     if (step.rest || step.hits.length === 0) {
                       const ox = gx + offsets[si] * pxPerTick;
                       const ow = step.beats * pxPerTick;
+                      // 前一步连线延伸覆盖的空步：不画灰线（红线已跨步延伸至此）
+                      const tiedOver = si > 0 && !!bar.steps[si - 1].tie && !step.rest;
                       return (
                         <g key={si}>
                           {step.rest && (
@@ -139,14 +141,16 @@ export function ScoreGrid({
                               0
                             </text>
                           )}
-                          <line
-                            x1={ox + 1}
-                            y1={rowY + rowHeight - 8}
-                            x2={ox + ow - 1}
-                            y2={rowY + rowHeight - 8}
-                            stroke="#ddd"
-                            strokeWidth={1.5}
-                          />
+                          {!tiedOver && (
+                            <line
+                              x1={ox + 1}
+                              y1={rowY + rowHeight - 8}
+                              x2={ox + ow - 1}
+                              y2={rowY + rowHeight - 8}
+                              stroke="#ddd"
+                              strokeWidth={1.5}
+                            />
+                          )}
                         </g>
                       );
                     }

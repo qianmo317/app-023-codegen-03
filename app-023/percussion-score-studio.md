@@ -24,6 +24,7 @@
 4. **试听**：Web Audio 原生合成，三种配方 `drum` / `metal` / `wood`；lookahead 调度（25ms 轮询、0.12s 预排窗口），BPM 可调 30–240。
 5. **曲牌库**：6 个内置骨架一键载入再改；跨小节条目自动切分（前段 `tie` 连打、后段转空步），末尾不足自动补休止（`src/lib/factory.ts`）。
 6. **持久化与出谱**：IndexedDB 保存曲目与设置（400ms 防抖自动保存）；打印视图 A4 横向，可切换简谱对照行，`window.print()` 出 PDF，另可导出 2 倍分辨率 PNG。
+7. **时值伸缩**：给定比例（预设 ×½/×⅔/×¾/×4/3/×3/2/×2，或自定义分数）把整段起音位置等比换算，除不尽时取最近整数格并用相邻合法时值拼出；重切优先对齐拍界（同拍分割不生硬）；拟音字/技法/力度全保留、每小节正好铺满；逐小节出改动报告，可一键撤销（`src/lib/stretch.ts`、`src/components/StretchPanel.tsx`）。
 
 ## 5. 进阶功能
 - 独奏/静音按钮（每件乐器一组，当前只作用于播放高亮，见 §11）。
@@ -80,6 +81,7 @@ IndexedDB 库名 `app023-percussion`，对象仓 `scores`（keyPath `id`，索�
 - **谱面布局**：小节按 `barsPerRow` 分行，一行系统高 = 小节号 16 + 乐器数 × 行高 + 14 + 简谱行高；时值线长度 = `beats × pxPerTick`，`tieLine` 向后合并连续 tie 的宽度（`src/components/ScoreGrid.tsx`、`src/lib/grid.ts`）。
 - **打印字号自适应**：按 A4 横排内容宽 1047px、目标每行最多 16 小节反算 `pxPerTick`，夹在 6–14 之间（`src/pages/Print.tsx`）。
 - **自动保存**：谱面变更后 400ms 防抖写 IndexedDB，并回显「已保存 HH:MM」（`src/pages/Editor.tsx`）。
+- **时值伸缩 `stretchScore`**：全曲拍平为「段」（每 step 一段），段起点 × 比例后四舍五入到最近整数格并保持单调（每段 ≥1 格，与理想位置偏差 ≤ 半格）；`decomposeTicks` 把每段重切成合法时值 {1,2,3,4,6}——整段恰好合法（附点 6 须拍首起）不拆，否则先补齐到下一拍界再继续，同拍分割不生硬；拟音字/技法/力度随段保留、齐奏同段不拆散，长段跨小节按「前段 tie + 后段空步」切分（与曲牌载入同约定），内容顶到末尾自动补小节；返回逐小节改动报告，应用前快照可一键撤销（`src/lib/stretch.ts`）。
 
 ## 9. 交互与视觉要点
 - 视觉规范：白底黑字，小节线 `#c0392b`，拍线 `#c9c9c9`，格线 `#eee`，乐器按自身 `color` 上色；选中乐器行底色 `#fff7f2` 且行名变红。
@@ -90,7 +92,7 @@ IndexedDB 库名 `app023-percussion`，对象仓 `scores`（keyPath `id`，索�
 - 窄屏（≤760px）编辑区改为纵向，乐器面板横向滚动，隐藏面板标题与提示。
 
 ## 10. 验收标准
-- 单元测试 58 例全绿：`tests/grid.test.ts` 26 例、`tests/glyphs.test.ts` 18 例、`tests/scheduler.test.ts` 9 例、`tests/storage.test.ts` 5 例。
+- 单元测试 86 例全绿：`tests/grid.test.ts` 26 例、`tests/glyphs.test.ts` 18 例、`tests/scheduler.test.ts` 9 例、`tests/storage.test.ts` 5 例、`tests/stretch.test.ts` 28 例。
 - 时值换算：整拍 4 / 半拍 2 / ¼ 拍 1 / 附点 6 / 附点半拍 3；4/4 = 16 格、2/4 = 8 格、3/4 = 12 格；不满小节被校验判为错误。
 - 调度精度：BPM 120 连续 240 拍，每击时刻与「整数格 × 固定每格秒数」的独立重算结果完全一致，相邻间隔偏差 < 1e-9s（验收线 10ms），末击无累积漂移。
 - 齐奏：同一步内鼓、大锣、钹三击的时间集合大小 = 1，完全同刻而非近似。

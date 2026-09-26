@@ -2,13 +2,15 @@
 // 键盘录入：字母=拟音字落字，数字=时值，方向键移动，Space 播放，+/- 调 BPM
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { TICKS_PER_BEAT, type Hit, type Score, type Step, type Tech } from '../types';
+import { TICKS_PER_BEAT, type Bar, type Hit, type Score, type Step, type Tech } from '../types';
 import { barTicks, setStepAt, stepAtOffset } from '../lib/grid';
 import { resolveKey, TECH_NAMES } from '../lib/glyphs';
 import { emptyBar } from '../lib/factory';
 import { getScore, saveScore } from '../lib/storage';
+import { stretchScore, type StretchReport } from '../lib/stretch';
 import { useAudio } from '../hooks/useAudio';
 import { ScoreGrid, type Selection } from '../components/ScoreGrid';
+import { StretchPanel } from '../components/StretchPanel';
 import { Transport } from '../components/Transport';
 import { useSettings } from '../settingsContext';
 import { DURATIONS } from '../lib/grid';
@@ -26,6 +28,9 @@ export function Editor({ scoreId, onNavigate }: Props) {
   const [selectedInst, setSelectedInst] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string>('');
   const [err, setErr] = useState<string>('');
+  const [stretchUndo, setStretchUndo] = useState<Bar[] | null>(null); // 伸缩前的小节快照（一键撤销用）
+  const [stretchReport, setStretchReport] = useState<StretchReport | null>(null);
+  const [stretchErr, setStretchErr] = useState('');
   const audio = useAudio(score ?? ({ bars: [] } as unknown as Score));
 
   useEffect(() => {
@@ -295,6 +300,30 @@ export function Editor({ scoreId, onNavigate }: Props) {
     patch((s) => (s.bars.length <= 1 ? s : { ...s, bars: s.bars.slice(0, -1) }));
   }, [patch]);
 
+  /** 时值伸缩：先留快照再整体换算；报告逐小节列出改动 */
+  const applyStretch = useCallback((ratio: number) => {
+    const s = scoreRef.current;
+    if (!s) return;
+    const res = stretchScore(s, ratio);
+    if (!res.ok) {
+      setStretchErr(res.error);
+      return;
+    }
+    setStretchErr('');
+    setStretchUndo(structuredClone(s.bars));
+    setScore(res.score);
+    setStretchReport(res.report);
+    setSelection((sel) => ({ bar: Math.min(sel.bar, res.score.bars.length - 1), tick: 0 }));
+  }, []);
+
+  const undoStretch = useCallback(() => {
+    if (!stretchUndo) return;
+    patch((s) => ({ ...s, bars: stretchUndo }));
+    setStretchUndo(null);
+    setStretchReport(null);
+    setStretchErr('');
+  }, [patch, stretchUndo]);
+
   const durationLabel = useMemo(
     () => DURATIONS.find((d) => d.ticks === duration)?.name ?? `${duration} 格`,
     [duration],
@@ -431,6 +460,14 @@ export function Editor({ scoreId, onNavigate }: Props) {
               双(Y)
             </button>
           </div>
+          <StretchPanel
+            canUndo={stretchUndo !== null}
+            report={stretchReport}
+            error={stretchErr}
+            onApply={applyStretch}
+            onUndo={undoStretch}
+            onCloseReport={() => setStretchReport(null)}
+          />
           <div className="score-scroll" data-testid="score-scroll">
             <ScoreGrid
               score={score}

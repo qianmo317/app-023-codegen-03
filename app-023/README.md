@@ -41,7 +41,7 @@ cd app-023
 npm install
 npm run dev        # 开发服务器（默认 5173）
 npm run build      # tsc -b && vite build（含类型检查）
-npm test           # 单元测试（58 个用例）
+npm test           # 单元测试（86 个用例）
 npm run e2e        # Playwright E2E（13 个用例，自动起 4174 preview）
 ```
 
@@ -80,6 +80,7 @@ npm run e2e        # Playwright E2E（13 个用例，自动起 4174 preview）
 | [lib/audio.ts](src/lib/audio.ts) | 合成音（drum/metal/wood）、lookahead 调度器、事件展开 | `computeEvents` `computeLoopEvents` `scheduleEvents` `playRange` |
 | [lib/storage.ts](src/lib/storage.ts) | IndexedDB CRUD（scores/settings） | `listScores` `getScore` `saveScore` `deleteScore` |
 | [lib/factory.ts](src/lib/factory.ts) | JSON 默认数据 → 对象、曲牌 → Score 转换（跨小节自动切分补休止） | `scoreFromPattern` `newEmptyScore` `emptyBar` |
+| [lib/stretch.ts](src/lib/stretch.ts) | 时值按比例伸缩：起音等比换算 → 最近格取整（单调）→ 合法时值重切（对齐拍界），拟音字/技法/力度全保留，逐小节出改动报告 | `stretchScore` `decomposeTicks` `parseRatio` |
 | [hooks/useAudio.ts](src/hooks/useAudio.ts) | 播放状态集中管理：ctx/调度/循环/高亮/独奏静音 | `useAudio(score)` |
 | [components/ScoreGrid.tsx](src/components/ScoreGrid.tsx) | SVG 谱面：时间×乐器网格、时值线、tie 延伸、齐奏同列、选中光标、高亮列 | `<ScoreGrid>` |
 | [components/Transport.tsx](src/components/Transport.tsx) | 试听控制台：播放/BPM/循环/高亮开关 | `<Transport>` |
@@ -115,6 +116,15 @@ npm run e2e        # Playwright E2E（13 个用例，自动起 4174 preview）
 ### 4.4 散板（freeMeter）
 
 不画严格拍格、时值线为相对宽度；播放按「等格时长 × `currentBeatStretch`」近似，UI 明确标注为近似。
+
+### 4.5 时值伸缩（stretchScore）
+
+编辑器「时值伸缩」工具条把整段谱面按比例换算（×½ 缩紧上台 / ×2 放慢练习，或自定义如 3/2）：
+
+1. 全曲拍平成「段」（每个 step 一段），段起点 × 比例后**四舍五入到最近整数格**，并保持单调、每段至少 1 格——除不尽时每个起音与理想位置偏差 ≤ 半格；
+2. 每段按 `decomposeTicks` 重切成合法时值 {1,2,3,4,6}：整段恰好合法（附点 6 须拍首起）则不拆，否则先补齐到下一拍界——同一拍内的分割不生硬；
+3. 拟音字 / 技法 / 力度随段原样保留，齐奏不拆散；长段跨小节自动切分（前段 tie 连线，与曲牌载入同一约定）；内容顶到末尾时自动补小节，一个击都不丢；
+4. 结果逐小节出改动报告（原位置 → 新位置，取整处标注「除不尽」），应用前留 `structuredClone` 快照，可一键撤销。
 
 ## 5. 常见开发任务
 
@@ -161,6 +171,7 @@ tests/grid.test.ts      26 用例：时值换算、切分偏移、拆格、宽�
 tests/glyphs.test.ts    18 用例：反查、技法区分、键位解析、防串乐器、冲突抛错
 tests/scheduler.test.ts  9 用例：漂移(<1e-9s)、齐奏同刻、循环相位、散板伸缩、lookahead 行为
 tests/storage.test.ts    5 用例：CRUD、排序、覆盖更新、设置往返（fake-indexeddb）
+tests/stretch.test.ts   28 用例：比例换算取整、合法时值重切、字/技法守恒、铺满、报告与撤销
 e2e/app.spec.ts         13 用例：真实点击全链路（见 6.3）
 ```
 
