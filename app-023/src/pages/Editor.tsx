@@ -5,6 +5,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { TICKS_PER_BEAT, type Hit, type Score, type Step, type Tech } from '../types';
 import { barTicks, setStepAt, stepAtOffset } from '../lib/grid';
 import { resolveKey, TECH_NAMES } from '../lib/glyphs';
+import { describeMapping, RATIO_PRESETS, stretchScore, type SegMapping } from '../lib/stretch';
 import { emptyBar } from '../lib/factory';
 import { getScore, saveScore } from '../lib/storage';
 import { useAudio } from '../hooks/useAudio';
@@ -26,6 +27,16 @@ export function Editor({ scoreId, onNavigate }: Props) {
   const [selectedInst, setSelectedInst] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string>('');
   const [err, setErr] = useState<string>('');
+  // 时值伸缩：备份（撤销用）+ 逐小节改动报告
+  const [stretchBackup, setStretchBackup] = useState<Score | null>(null);
+  const [stretchReport, setStretchReport] = useState<{
+    label: string;
+    mappings: SegMapping[];
+    changedBars: number[];
+  } | null>(null);
+  const [stretchErr, setStretchErr] = useState('');
+  const [customNum, setCustomNum] = useState('3');
+  const [customDen, setCustomDen] = useState('2');
   const audio = useAudio(score ?? ({ bars: [] } as unknown as Score));
 
   useEffect(() => {
@@ -295,6 +306,56 @@ export function Editor({ scoreId, onNavigate }: Props) {
     patch((s) => (s.bars.length <= 1 ? s : { ...s, bars: s.bars.slice(0, -1) }));
   }, [patch]);
 
+  /** 时值伸缩：按比例换算全曲起音位置；旧谱整体备份，可一键撤销 */
+  const applyStretch = useCallback(
+    (num: number, den: number, label: string) => {
+      if (!score) return;
+      const res = stretchScore(score, num, den);
+      if (!res.ok) {
+        setStretchErr(res.error);
+        return;
+      }
+      audio.stop();
+      setStretchErr('');
+      setStretchBackup(score); // 不可变数据：备份即旧引用，撤销直接还原
+      setScore(res.score);
+      setSelection({ bar: 0, tick: 0 });
+      setStretchReport({ label, mappings: res.mappings, changedBars: res.changedBars });
+    },
+    [score, audio],
+  );
+
+  const undoStretch = useCallback(() => {
+    if (!stretchBackup) return;
+    audio.stop();
+    setScore(stretchBackup);
+    setStretchBackup(null);
+    setStretchReport(null);
+    setStretchErr('');
+    setSelection({ bar: 0, tick: 0 });
+  }, [stretchBackup, audio]);
+
+  /** 逐小节 diff：新小节号 → 该小节内每段的改动描述 */
+  const stretchRows = useMemo(() => {
+    if (!stretchReport || !score) return [];
+    const barT = barTicks(score.bars[0]?.beatsPerBar ?? 4);
+    const byBar = new Map<number, string[]>();
+    for (const m of stretchReport.mappings) {
+      const text = describeMapping(m);
+      if (!text) continue;
+      const barIdx = m.placements.length ? m.placements[0].bar : Math.floor(m.toStart / barT);
+      const list = byBar.get(barIdx) ?? [];
+      list.push(text);
+      byBar.set(barIdx, list);
+    }
+    return [...byBar.entries()].sort((a, b) => a[0] - b[0]);
+  }, [stretchReport, score]);
+
+  const markedBars = useMemo(
+    () => new Set(stretchReport?.changedBars ?? []),
+    [stretchReport],
+  );
+
   const durationLabel = useMemo(
     () => DURATIONS.find((d) => d.ticks === duration)?.name ?? `${duration} 格`,
     [duration],
@@ -339,6 +400,11 @@ export function Editor({ scoreId, onNavigate }: Props) {
         <button className="btn" onClick={removeLastBar}>
           −末小节
         </button>
+        {stretchBackup && (
+          <button className="btn undo-stretch" data-testid="btn-undo-stretch" onClick={undoStretch} title="回到伸缩前的谱面">
+            ↩ 撤销伸缩
+          </button>
+        )}
         <button className="btn" data-testid="btn-print" onClick={() => onNavigate(`#/score/${score.id}/print`)}>
           出谱打印
         </button>
@@ -430,7 +496,70 @@ export function Editor({ scoreId, onNavigate }: Props) {
             <button className="btn-sm" data-testid="btn-tech-flam" onClick={() => toggleTech(selection.bar, selection.tick, 'flam')}>
               双(Y)
             </button>
+            <span className="stretch-ctrls" data-testid="stretch-ctrls">
+              <span className="dim">时值伸缩</span>
+              {RATIO_PRESETS.map((p) => (
+                <button
+                  key={p.label}
+                  className="btn-sm"
+                  data-testid={`stretch-${p.num}-${p.den}`}
+                  title={`全部起音位置 ×${p.num}/${p.den}`}
+                  onClick={() => applyStretch(p.num, p.den, p.label)}
+                >
+                  {p.label}
+                </button>
+              ))}
+              <input
+                type="number"
+                min={1}
+                max={8}
+                value={customNum}
+                data-testid="stretch-num"
+                onChange={(e) => setCustomNum(e.target.value)}
+              />
+              /
+              <input
+                type="number"
+                min={1}
+                max={8}
+                value={customDen}
+                data-testid="stretch-den"
+                onChange={(e) => setCustomDen(e.target.value)}
+              />
+              <button
+                className="btn-sm"
+                data-testid="btn-stretch-custom"
+                onClick={() => applyStretch(Number(customNum), Number(customDen), `×${customNum}/${customDen}`)}
+              >
+                应用
+              </button>
+              {stretchErr && (
+                <span className="stretch-err" data-testid="stretch-err">
+                  {stretchErr}
+                </span>
+              )}
+            </span>
           </div>
+          {stretchReport && (
+            <div className="stretch-report" data-testid="stretch-report">
+              <div className="stretch-report-head">
+                <b>已按 {stretchReport.label} 伸缩</b>
+                <span className="dim">
+                  改动 {stretchReport.changedBars.length} 个小节（谱面 ◆ 标记）；点顶栏「↩ 撤销伸缩」可还原
+                </span>
+                <button className="btn-sm" onClick={() => setStretchReport(null)}>
+                  收起
+                </button>
+              </div>
+              <ul>
+                {stretchRows.map(([barIdx, lines]) => (
+                  <li key={barIdx} data-testid={`stretch-bar-${barIdx}`}>
+                    <b>第 {barIdx + 1} 小节</b>：{lines.join('；')}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="score-scroll" data-testid="score-scroll">
             <ScoreGrid
               score={score}
@@ -439,6 +568,7 @@ export function Editor({ scoreId, onNavigate }: Props) {
               selection={selection}
               highlight={audio.playing && settings.showHighlight ? audio.position : null}
               selectedInstrument={instId}
+              markBars={markedBars}
               onCellClick={onCellClick}
             />
           </div>

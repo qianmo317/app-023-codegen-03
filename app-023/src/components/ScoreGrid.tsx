@@ -22,6 +22,8 @@ interface Props {
   selectedInstrument?: string | null;
   showJianpu?: boolean;
   showBeatHighlightBg?: boolean;
+  /** 需要 ◆ 标记的小节（如时值伸缩后有改动的小节） */
+  markBars?: ReadonlySet<number>;
   onCellClick?: (bar: number, tick: number) => void;
   testIdPrefix?: string;
 }
@@ -39,6 +41,7 @@ export function ScoreGrid({
   selectedInstrument = null,
   showJianpu = false,
   showBeatHighlightBg = true,
+  markBars,
   onCellClick,
   testIdPrefix = 'grid',
 }: Props) {
@@ -93,9 +96,16 @@ export function ScoreGrid({
         const hiHere = highlight?.bar === barIndex ? highlight : null;
         return (
           <g key={barIndex} data-testid={`${testIdPrefix}-bar-${barIndex}`}>
-            {/* 小节号 */}
-            <text x={gx} y={y + 12} fontSize={12} fill="#666">
+            {/* 小节号（◆ = 时值伸缩后有改动的小节） */}
+            <text
+              x={gx}
+              y={y + 12}
+              fontSize={12}
+              fill={markBars?.has(barIndex) ? '#c96a00' : '#666'}
+              fontWeight={markBars?.has(barIndex) ? 700 : 400}
+            >
               {barIndex + 1}
+              {markBars?.has(barIndex) ? ' ◆' : ''}
               {bar.tempoNote ? `（${bar.tempoNote}）` : ''}
             </text>
             {/* 每行乐器 */}

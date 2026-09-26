@@ -76,6 +76,7 @@ npm run e2e        # Playwright E2E（13 个用例，自动起 4174 preview）
 | 模块 | 职责 | 关键导出 |
 |------|------|----------|
 | [lib/grid.ts](src/lib/grid.ts) | 时值↔格换算、step 偏移、拆格合并、宽度计算（编辑与打印共用同一函数，保证宽度一致） | `barTicks` `stepOffsets` `setStepAt` `scoreWidthPx` `barsPerRow` |
+| [lib/stretch.ts](src/lib/stretch.ts) | 时值伸缩：按比例换算全曲起音位置，DP 量化回整数格 + 合法时值切片，输出逐小节 diff | `stretchScore` `sliceSegment` `describeMapping` `RATIO_PRESETS` |
 | [lib/glyphs.ts](src/lib/glyphs.ts) | 拟音字↔乐器/技法反查、键位解析、防串乐器校验 | `buildGlyphMap` `resolveKey` `lookupGlyph` `validateHitGlyphs` |
 | [lib/audio.ts](src/lib/audio.ts) | 合成音（drum/metal/wood）、lookahead 调度器、事件展开 | `computeEvents` `computeLoopEvents` `scheduleEvents` `playRange` |
 | [lib/storage.ts](src/lib/storage.ts) | IndexedDB CRUD（scores/settings） | `listScores` `getScore` `saveScore` `deleteScore` |
@@ -115,6 +116,15 @@ npm run e2e        # Playwright E2E（13 个用例，自动起 4174 preview）
 ### 4.4 散板（freeMeter）
 
 不画严格拍格、时值线为相对宽度；播放按「等格时长 × `currentBeatStretch`」近似，UI 明确标注为近似。
+
+### 4.5 时值伸缩（stretchScore）
+
+把整段锣鼓经按比例（如 ×2 放慢练、×½ 缩紧上台）换算每击起音位置，再量化回整数格：
+
+1. **全曲统一缩放**：拍号不变，小节数随比例增减；每小节仍恰好铺满（不变式不破）。
+2. **除不尽 → DP 量化**：动态规划选整数边界，使各段量化时值与理想时值的总误差最小；实在放不下（比例过小）时并入同格齐奏，拟音字一个不丢。
+3. **合法时值切片**：每段切成 1/2/3/4/6 格的组合，切口优先落在拍界上 —— 同一拍里的分割不生硬（如拍首 5 格 → 4+1，而非 1+4）。
+4. **逐小节 diff**：返回每段的 `SegMapping`（原位置 → 新位置/时值/切片/跨小节），编辑器据此列出改动清单并在谱面打 ◆ 标记；旧谱整体备份（不可变数据），一键撤销即还原引用。
 
 ## 5. 常见开发任务
 
@@ -161,7 +171,8 @@ tests/grid.test.ts      26 用例：时值换算、切分偏移、拆格、宽�
 tests/glyphs.test.ts    18 用例：反查、技法区分、键位解析、防串乐器、冲突抛错
 tests/scheduler.test.ts  9 用例：漂移(<1e-9s)、齐奏同刻、循环相位、散板伸缩、lookahead 行为
 tests/storage.test.ts    5 用例：CRUD、排序、覆盖更新、设置往返（fake-indexeddb）
-e2e/app.spec.ts         13 用例：真实点击全链路（见 6.3）
+tests/stretch.test.ts   24 用例：比例换算、合法时值切片、除不尽量化、铺满、字/技法保留、diff
+e2e/app.spec.ts         15 用例：真实点击全链路（见 6.3）
 ```
 
 ### 6.2 约定

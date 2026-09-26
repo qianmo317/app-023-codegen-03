@@ -206,6 +206,44 @@ test.describe('设置', () => {
   });
 });
 
+test.describe('时值伸缩', () => {
+  test('放慢一倍：逐小节报告改动、谱面 ◆ 标记、一键撤销还原', async ({ page }) => {
+    await page.goto('#/library');
+    await page.getByTestId('load-jijifeng').click();
+    await expect(page.getByTestId('editor-page')).toBeVisible();
+    const bars0 = await page.locator('[data-testid^="grid-bar-"]').count();
+    expect(bars0).toBe(4);
+
+    // 放慢一倍 → 8 小节，改动报告出现，拟音字仍在
+    await page.getByTestId('stretch-2-1').click();
+    await expect(page.getByTestId('stretch-report')).toBeVisible();
+    const bars1 = await page.locator('[data-testid^="grid-bar-"]').count();
+    expect(bars1).toBe(8);
+    await expect(page.getByTestId('grid-glyph-0-0-daluo')).toBeVisible(); // 哐 没丢
+    await expect(page.getByTestId('stretch-bar-0')).toContainText('哐·才·七');
+    await expect(page.getByTestId('btn-undo-stretch')).toBeVisible();
+
+    // 撤销 → 回到 4 小节
+    await page.getByTestId('btn-undo-stretch').click();
+    await expect(page.getByTestId('stretch-report')).toHaveCount(0);
+    const bars2 = await page.locator('[data-testid^="grid-bar-"]').count();
+    expect(bars2).toBe(4);
+    await expect(page.getByTestId('grid-glyph-0-0-daluo')).toBeVisible();
+  });
+
+  test('自定义比例 ×3/2：除不尽时量化标注 ≈理想值', async ({ page }) => {
+    await page.goto('#/library');
+    await page.getByTestId('load-maler').click(); // 马腿儿：含 ¼ 拍（1 格）段
+    await expect(page.getByTestId('editor-page')).toBeVisible();
+    await page.getByTestId('stretch-num').fill('3');
+    await page.getByTestId('stretch-den').fill('2');
+    await page.getByTestId('btn-stretch-custom').click();
+    await expect(page.getByTestId('stretch-report')).toBeVisible();
+    await expect(page.getByTestId('stretch-report')).toContainText('≈理想');
+    await expect(page.getByTestId('stretch-report')).toContainText('咚');
+  });
+});
+
 test.describe('性能', () => {
   test('验收：100 小节谱面滚动 ≥ 50fps', async ({ page }) => {
     await createEmptyScore(page, 'E2E 百小节');

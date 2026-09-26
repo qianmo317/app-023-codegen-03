@@ -86,10 +86,24 @@ h2 { font-size: 16px; margin: 18px 0 6px; border-left: 3px solid var(--red); pad
 .score-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .duration-bar {
   display: flex; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--border);
-  background: #fbfaf6; flex-wrap: wrap;
+  background: #fbfaf6; flex-wrap: wrap; align-items: center;
 }
 .score-scroll { flex: 1; overflow: auto; padding: 12px; background: #fff; }
 .score-svg { display: block; }
+
+/* ---- 时值伸缩 ---- */
+.stretch-ctrls { display: flex; gap: 4px; align-items: center; margin-left: auto; flex-wrap: wrap; }
+.stretch-ctrls input[type='number'] { width: 46px; padding: 1px 4px; }
+.stretch-err { color: var(--red); font-size: 12px; }
+.undo-stretch { border-color: #c96a00; color: #c96a00; }
+.stretch-report {
+  margin: 8px 12px 0; border: 1px solid #e3c07a; background: #fffaf0;
+  border-radius: 6px; padding: 8px 12px; font-size: 13px;
+}
+.stretch-report-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.stretch-report-head .btn-sm { margin-left: auto; }
+.stretch-report ul { margin: 6px 0 0; padding-left: 20px; max-height: 160px; overflow-y: auto; }
+.stretch-report li { margin: 2px 0; }
 
 /* ---- 试听控制台 ---- */
 .transport {
